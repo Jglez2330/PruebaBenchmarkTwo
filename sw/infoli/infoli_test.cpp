@@ -47,11 +47,6 @@ int main(int argc, char** argv){
     auto time_start = std::chrono::system_clock::now();
     for(int i=0;i<step;i++){
         ComputeNetwork_neon(cs,sc);
-	if (cs.Prev_V_Dend[0] != cs.Prev_V_Dend[0]){
-		std::cout<< "Pare Hijueputa XD\n\n\n\n\n\n\n\n\n::GAY\n\n\n\n\n\n\n\n";
-		system("pause");
-		break;
-	}
 	std::cout<<"Step: "<<i
 		<<" vdend "<<  cs.Prev_V_Dend[0]
 		//<<" vdend "<<  cs.V_Dend[0]

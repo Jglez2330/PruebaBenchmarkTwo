@@ -5,11 +5,13 @@
 inline auto oneVec(float a){return vdupq_n_f32(a);}
 inline mod_prec min(mod_prec a, mod_prec b){return (a<b)?a:b;}
 
+/*
+ * f(a,b)=a/b
+ */
 auto divVec(float32x4_t a, float32x4_t b) {
-	auto reciprocal = vrecpeq_f32(b);
-	reciprocal = vmulq_f32(vrecpsq_f32(b, reciprocal), reciprocal);
-	reciprocal = vmulq_f32(vrecpsq_f32(b, reciprocal), reciprocal);
-	return vmulq_f32(a,reciprocal);
+	auto rec = vrecpeq_f32(b);
+	rec = vmulq_f32(vrecpsq_f32(b, rec),rec);
+	return vmulq_f32(a,rec);
 }
 
 void swapVec(cellStateV &s){
