@@ -5,6 +5,13 @@
 inline auto oneVec(float a){return vdupq_n_f32(a);}
 inline mod_prec min(mod_prec a, mod_prec b){return (a<b)?a:b;}
 
+auto divVec(float32x4_t a, float32x4_t b) {
+	auto reciprocal = vrecpeq_f32(b);
+	reciprocal = vmulq_f32(vrecpsq_f32(b, reciprocal), reciprocal);
+	reciprocal = vmulq_f32(vrecpsq_f32(b, reciprocal), reciprocal);
+	return vmulq_f32(a,reciprocal);
+}
+
 void swapVec(cellStateV &s){
     s.Prev_V_Dend.swap(s.V_Dend);
     s.Prev_V_Soma.swap(s.V_Soma);
@@ -30,7 +37,7 @@ DendHCurr_neon(cellStateV &s, uint idx) {
     auto const src = s.Hcurrent_q.data()+idx;
     auto const prevV_dend = vld1q_f32(s.Prev_V_Dend.data()+idx);
     auto const exp_qinf = exp_ps(vaddq_f32(vmulq_f32(prevV_dend,oneVec(0.25f)),oneVec(20.0f)));
-    auto const q_inf = vrecpeq_f32(vaddq_f32(exp_qinf,oneVec(1.0f)));
+    auto const q_inf = divVec(oneVec(1.0f),(vaddq_f32(exp_qinf,oneVec(1.0f))));
     auto const exp0_tau = exp_ps(vaddq_f32(vmulq_f32(prevV_dend,oneVec(-0.086f)),oneVec(-14.6f)));
     auto const exp1_tau = exp_ps(vaddq_f32(vmulq_f32(prevV_dend,oneVec(0.070f)),oneVec(-1.87f)));
     auto const inv_tau_q = vaddq_f32(exp0_tau,exp1_tau);
@@ -56,10 +63,10 @@ void DendCaCurr_neon(cellStateV &s, uint idx){
     auto const prevCalcium_r = vld1q_f32(src);
 
     auto const exp_alpha = exp_ps(vmulq_f32(vaddq_f32(prevV_dend,oneVec(-5.0f)),oneVec(div_thirteen)));
-    auto const alpha_r = vmulq_f32(oneVec(1.7f),vrecpeq_f32(vaddq_f32(oneVec(1.0f),exp_alpha)));
+    auto const alpha_r = divVec(oneVec(1.7f),vaddq_f32(oneVec(1.0f),exp_alpha));
     auto const vplus_eight = vaddq_f32(prevV_dend,oneVec(8.5f)); 
     auto const exp_beta = exp_ps(vmulq_f32(vplus_eight,oneVec(div_five)));
-    auto const beta_r = vmulq_f32(vmulq_f32(oneVec(0.02f),vplus_eight),vrecpeq_f32(vaddq_f32(exp_beta,oneVec(-1.0f))));
+    auto const beta_r = divVec(vmulq_f32(oneVec(0.02f),vplus_eight),vaddq_f32(exp_beta,oneVec(-1.0f)));
     auto const alpha_p_beta = vmulq_f32(oneVec(delta_five),vaddq_f32(alpha_r,beta_r));
     auto const r_local = vaddq_f32(vmulq_f32(vsubq_f32(oneVec(1.0f),alpha_p_beta),prevCalcium_r),vmulq_f32(oneVec(delta_five),alpha_r));
     vst1q_f32(src,r_local);
@@ -174,17 +181,17 @@ void SomaCalcium_neon(cellStateV &st, uint idx){
     auto const prevCalcium_l = vld1q_f32(st.Calcium_l.data()+idx);
 
     auto const exp_k_inf = exp_ps(vmulq_f32(vmulq_f32(vaddq_f32(prevV_soma,oneVec(61.0f)),oneVec(four)),oneVec(-1.0f)));
-    auto const k_inf = vrecpeq_f32(vaddq_f32(exp_k_inf,oneVec(1.0f)));
+    auto const k_inf = divVec(oneVec(1.0f),vaddq_f32(exp_k_inf,oneVec(1.0f)));
 
     auto const exp_l_inf = exp_ps(vmulq_f32(vaddq_f32(prevV_soma,oneVec(85.5f)),oneVec(eight)));
-    auto const l_inf = vrecpeq_f32(vaddq_f32(exp_l_inf,oneVec(1.0f)));
+    auto const l_inf = divVec(oneVec(1.0f),vaddq_f32(exp_l_inf,oneVec(1.0f)));
 
     auto const tau_l_num = vmulq_f32(exp_ps(vmulq_f32(vaddq_f32(prevV_soma,oneVec(160.0f)),oneVec(thirty))),oneVec(20.0f));
     auto const tau_l_den = vaddq_f32(exp_ps(vmulq_f32(vaddq_f32(prevV_soma,oneVec(84.0f)),oneVec(seven))),oneVec(1.0f));
-    auto const tau_l = vaddq_f32(vmulq_f32(vrecpeq_f32(tau_l_den),tau_l_num),oneVec(35.0f));
+    auto const tau_l = vaddq_f32(divVec(tau_l_num,tau_l_den),oneVec(35.0f));
 
     auto const dk_dt = vsubq_f32(k_inf,prevCalcium_k);
-    auto const dl_dt = vmulq_f32(vsubq_f32(l_inf,prevCalcium_l),vrecpeq_f32(tau_l));
+    auto const dl_dt = divVec(vsubq_f32(l_inf,prevCalcium_l),tau_l);
     auto const k_local = vaddq_f32(vmulq_f32(oneVec(DELTA),dk_dt),prevCalcium_k);
     auto const l_local = vaddq_f32(vmulq_f32(oneVec(DELTA),dl_dt),prevCalcium_l);
     //Put result
@@ -208,15 +215,15 @@ void SomaSodium_neon(cellStateV &st, uint idx){
     // RAT THALAMOCORTICAL SODIUM:
 
     auto const exp_m_inf = exp_ps(vmulq_f32(vsubq_f32(oneVec(-30.0f),prevV_soma),oneVec(five_five)));
-    auto const m_inf = vrecpeq_f32(vaddq_f32(exp_m_inf,oneVec(1.0f)));
+    auto const m_inf = divVec(oneVec(1.0f),vaddq_f32(exp_m_inf,oneVec(1.0f)));
 
     auto const exp_h_inf = exp_ps(vmulq_f32(vsubq_f32(oneVec(-70.0f),prevV_soma),oneVec(five_eight)));
-    auto const h_inf = vrecpeq_f32(vaddq_f32(exp_h_inf,oneVec(1.0f)));
+    auto const h_inf = divVec(oneVec(1.0f),vaddq_f32(exp_h_inf,oneVec(1.0f)));
 
     auto const exp_tau_h = exp_ps(vmulq_f32(vsubq_f32(oneVec(-40.0f),prevV_soma),oneVec(thirty_three)));
     auto const tau_h = vmulq_f32(exp_tau_h,oneVec(3.0f));
 
-    auto const dh_dt = vmulq_f32(vsubq_f32(h_inf,prevSodium_h),vrecpeq_f32(tau_h));
+    auto const dh_dt = divVec(vsubq_f32(h_inf,prevSodium_h),tau_h);
     auto const m_local = m_inf;
     auto const h_local = vaddq_f32(vmulq_f32(dh_dt,oneVec(DELTA)),prevSodium_h);
     //Put result
@@ -241,14 +248,14 @@ void SomaPotassium_neon(cellStateV &st, uint idx){
 
     // NEOCORTICAL
     auto const exp_n_inf = exp_ps(vmulq_f32(vaddq_f32(vnegq_f32(prevV_soma),oneVec(-3.0f)),oneVec(ten)));
-    auto const n_inf = vrecpeq_f32(vaddq_f32(exp_n_inf,oneVec(1.0f)));
+    auto const n_inf = divVec(oneVec(1.0f),vaddq_f32(exp_n_inf,oneVec(1.0f)));
     auto const exp_p_inf = exp_ps(vmulq_f32(vaddq_f32(prevV_soma,oneVec(51.0f)),oneVec(twelve)));
-    auto const p_inf = vrecpeq_f32(vaddq_f32(exp_p_inf,oneVec(1.0f)));
+    auto const p_inf = divVec(oneVec(1.0f),vaddq_f32(exp_p_inf,oneVec(1.0f)));
     auto const exp_tau_n = exp_ps(vmulq_f32(vaddq_f32(prevV_soma,oneVec(50.0f)),oneVec(nine_hundred)));
     auto const tau_n = vaddq_f32(vmulq_f32(exp_tau_n,oneVec(47.0f)),oneVec(5.0f));
 
-    auto const dn_dt = vmulq_f32(vaddq_f32(vnegq_f32(prevPotassium_n),n_inf),vrecpeq_f32(tau_n));
-    auto const dp_dt = vmulq_f32(vaddq_f32(vnegq_f32(prevPotassium_p),p_inf),vrecpeq_f32(tau_n));
+    auto const dn_dt = divVec(vaddq_f32(vnegq_f32(prevPotassium_n),n_inf),tau_n);
+    auto const dp_dt = divVec(vaddq_f32(vnegq_f32(prevPotassium_p),p_inf),tau_n);
 
     auto const n_local = vaddq_f32(vmulq_f32(dn_dt,oneVec(DELTA)),prevPotassium_n);
     auto const p_local = vaddq_f32(vmulq_f32(dp_dt,oneVec(DELTA)),prevPotassium_p);
@@ -271,8 +278,8 @@ void SomaPotassiumX_neon(cellStateV &st, uint idx){
 
     // Voltage-dependent (fast) potassium
     auto const exp_alpha_x_s = exp_ps(vmulq_f32(vnegq_f32(vaddq_f32(prevV_soma,oneVec(25.0f))),oneVec(ten)));
-    auto const den_alpha_x_s = vrecpeq_f32(vaddq_f32(vnegq_f32(exp_alpha_x_s),oneVec(1.0f)));
-    auto const alpha_x_s = vmulq_f32(vmulq_f32(vaddq_f32(prevV_soma,oneVec(25.0f)),oneVec(0.13f)),den_alpha_x_s);
+    auto const den_alpha_x_s = vaddq_f32(vnegq_f32(exp_alpha_x_s),oneVec(1.0f));
+    auto const alpha_x_s = divVec(vmulq_f32(vaddq_f32(prevV_soma,oneVec(25.0f)),oneVec(0.13f)),den_alpha_x_s);
 
     auto const exp_beta_x_s = exp_ps(vmulq_f32(vaddq_f32(prevV_soma,oneVec(35.0f)),oneVec(-0.0125f)));
     auto const beta_x_s  = vmulq_f32(exp_beta_x_s,oneVec(1.69f));
